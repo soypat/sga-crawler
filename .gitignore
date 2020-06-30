@@ -16,3 +16,8 @@
 
 .idea/*
 *.log
+
+# Distributable
+bin/*
+sgacrawl.zip
+README.txt
