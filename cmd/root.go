@@ -152,7 +152,6 @@ func checkConfig(args []string) error {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", ".sgacrawl.yaml", "config file (default is $HOME/.sgacrawl.yaml)")
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 // initConfig reads in config file and ENV variables if set.
