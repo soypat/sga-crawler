@@ -20,8 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"strings"
-
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
 )
 
@@ -61,11 +60,13 @@ You can copy the text above to a text-editor and save to have a config file up a
 		if err := checkConfig(args); err != nil {
 			return err
 		}
+		logScrapef("[inf] finished processing config file successfully")
 		return nil
 	},
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
+		logScrapef("[inf] starting program")
 		if err := runner(args); err != nil {
 			fmt.Printf("[ERR] %s", err.Error())
 			os.Exit(1)
@@ -73,7 +74,7 @@ You can copy the text above to a text-editor and save to have a config file up a
 	},
 }
 
-func runner(args []string) error {
+func runner(_ []string) error {
 	if viper.GetBool("log.tofile") {
 		fo, err := os.Create("sgacrawl.log")
 		if err != nil {
@@ -94,23 +95,26 @@ func Execute() {
 		os.Exit(1)
 	}
 }
-func checkConfig(args []string) error {
+func checkConfig(_ []string) error {
 	if year := viper.GetInt("filter.year"); year > 2050 || year < 2000 {
-		return fmt.Errorf("Bad year! should be integer, managed to read:%d", year)
+		return fmt.Errorf("bad year! should be integer, managed to read: %d", year)
 	}
 	level := viper.GetString("filter.level")
 	switch strings.ToLower(level) {
+	case "todos", "all":
+		level = FilterLevel_All
 	case "grado", "grad":
 		level = FilterLevel_Grado
-	case "ingreso", "ing":
+	case "ingreso", "ing", "pichis":
 		level = FilterLevel_Ingreso
 	case "posgrado", "pos":
 		level = FilterLevel_Posgrado
 	case "ee":
 		level = FilterLevel_EducacionEjecutiva
 	case "0", "1", "2", "3", "":
+		// no action taken
 	default:
-		return fmt.Errorf("Bad filter.level in config. got %s", level)
+		return fmt.Errorf("bad filter.level in config. got %s", level)
 	}
 	viper.Set("filter.level", level)
 
@@ -127,7 +131,7 @@ func checkConfig(args []string) error {
 	case "special", "especial":
 		period = FilterPeriod_Special
 	default:
-		return fmt.Errorf("Bad filter.period in config. got %s", period)
+		return fmt.Errorf("bad filter.period in config. got %s", period)
 	}
 	viper.Set("filter.period", period)
 	if delay := viper.GetInt("request-delay.minimum_ms"); delay < 800 {
@@ -143,7 +147,6 @@ func checkConfig(args []string) error {
 	if bufferMax := viper.GetInt("concurrent.classBufferMax"); bufferMax < 1 {
 		return fmt.Errorf("concurrent.classBufferMax too low or not found. Must be at least 1")
 	}
-	fmt.Printf("[info] Finished processing config file. succesfully\n")
 	if p := viper.GetString("login.password"); p == "" {
 		viper.Set("login.user", "")
 	}
@@ -151,7 +154,7 @@ func checkConfig(args []string) error {
 }
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", ".sgacrawl.yaml", "config file (default is $HOME/.sgacrawl.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", ".sgacrawl.yaml", "config file. Should be in working directory")
 }
 
 // initConfig reads in config file and ENV variables if set.

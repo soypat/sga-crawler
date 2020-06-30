@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-//const maxClasses = 10
-
 const (
 	// filter option identificator
 	filterLevel  = 3 // dropdown or 'select' element
@@ -45,7 +43,6 @@ var filterURI = make(map[string]string, 64)
 const (
 	domain        = "sga.itba.edu.ar"
 	urlStart      = "https://" + domain
-	testURL       = "http://localhost:8080/"
 	htmlNameAttr  = "name"
 	htmlValueAttr = "value"
 	htmlLabelElem = "label"
@@ -66,7 +63,7 @@ func scrape() error {
 		// Allow crawling to be done in parallel / async
 		colly.Async(true),
 	)
-	c.Limit(&colly.LimitRule{
+	err := c.Limit(&colly.LimitRule{
 		// Filter domains affected by this rule
 		DomainGlob: domain,
 		// Set a delay between requests to these domains
@@ -75,6 +72,9 @@ func scrape() error {
 		RandomDelay: time.Duration(viper.GetInt("request-delay.rand_ms") * 1e6),
 		Parallelism: viper.GetInt("concurrent.threads"),
 	})
+	if err != nil {
+		return err
+	}
 	// fill out loginURI form info for POST method
 	c.OnHTML("input", func(e *colly.HTMLElement) {
 		var value string
@@ -90,10 +90,10 @@ func scrape() error {
 			value = e.Attr(htmlValueAttr)
 		}
 		loginURI[inputName] = value
-		if inputName == "password" {
+		if inputName == "password" && len(value) > 0 {
 			value = "********"
 		}
-		logScrapef("[loginURI] value:key ->%s:%s\n", inputName, value)
+		logScrapef("[loginURI] value:key -> %s:%s", inputName, value)
 	})
 	// look for form action attribute for post method
 	c.OnHTML("form", func(e *colly.HTMLElement) {
@@ -101,7 +101,7 @@ func scrape() error {
 		loginURL = e.Request.URL.String()
 	})
 	// start visiting
-	err := c.Visit(urlStart)
+	err = c.Visit(urlStart)
 	c.Wait()
 	d := c.Clone()
 	var cursosURL string
@@ -162,7 +162,7 @@ func scrape() error {
 	_ = scrapeBase.Post(filterPostURL, filterURI)
 	scrapeBase.Wait()
 	if scrapeBaseURL == "" {
-		return fmt.Errorf("Got no url!")
+		return fmt.Errorf("got no url. check user/password settings")
 	}
 
 	// Initialize scraper queues
@@ -206,8 +206,9 @@ func scrape() error {
 			EOS = true
 		}
 	}
-	logScrapef("[inf] Finished scraping class links!\n")
+	logScrapef("[inf] finished scraping class links")
 	wg.Wait()
+	logScrapef("[inf] program end")
 	if err != nil {
 		return err
 	}
@@ -228,6 +229,7 @@ func traverseClasses(s *colly.Collector, c *chan string, wg *sync.WaitGroup) {
 		}
 		if url == "EOS" {
 			urlComissionQueue <- "EOS"
+			logScrapef("[inf] finished classes")
 			break
 		}
 		classScraper := baseClassScraper.Clone()
@@ -235,7 +237,7 @@ func traverseClasses(s *colly.Collector, c *chan string, wg *sync.WaitGroup) {
 		classScraper.OnHTML("li.tab1 a", func(e *colly.HTMLElement) {
 			urlComissionQueue <- urlStart + "/app2" + trimDirectories(e.Attr("href"), -2)
 		})
-		logScrapef("[scp] Visiting class...\n")
+		logScrapef("[scp] visiting class...")
 		_ = classScraper.Visit(url)
 		classScraper.Wait()
 	}
@@ -253,17 +255,17 @@ type comission struct {
 	Location  string
 }
 
-type weekday int
+//type weekday int
 
-const (
-	dayMon weekday = iota
-	dayTue
-	dayWed
-	dayThu
-	dayFri
-	daySat
-	daySun
-)
+//const (
+//	dayMon weekday = iota
+//	dayTue
+//	dayWed
+//	dayThu
+//	dayFri
+//	daySat
+//	daySun
+//)
 
 func traverseComissions(s *colly.Collector, c *chan string, wg *sync.WaitGroup) {
 	CLASSES := make(chan class, viper.GetInt("concurrent.classBufferMax"))
@@ -281,6 +283,7 @@ func traverseComissions(s *colly.Collector, c *chan string, wg *sync.WaitGroup) 
 				Name:       "EOS",
 				Code:       "EOS",
 			}
+			logScrapef("[inf] finished comissions")
 			return
 		}
 		comissionScraper := baseComissionScraper.Clone()
@@ -316,7 +319,7 @@ func traverseComissions(s *colly.Collector, c *chan string, wg *sync.WaitGroup) 
 			})
 			CLASSES <- newClass
 		})
-		logScrapef("[scp] visiting comission...\n")
+		logScrapef("[scp] visiting comission...")
 		_ = comissionScraper.Visit(url)
 		comissionScraper.Wait()
 	}
@@ -330,7 +333,10 @@ func writeClasses(c *chan class, wg *sync.WaitGroup) {
 		panic("Could not create class file. Permissions ok?")
 	}
 	defer fo.Close()
-	fo.Write([]byte("[\n"))
+	defer fo.Sync()
+	_, _ = fo.WriteString("[\n")
+	defer time.Sleep(time.Nanosecond)
+	defer fo.WriteString("\n]")
 	classCounter := 0
 	for {
 		class, ok := <-*c
@@ -340,6 +346,7 @@ func writeClasses(c *chan class, wg *sync.WaitGroup) {
 			continue
 		}
 		if class.Name == "EOS" {
+			logScrapef("[out] finished writing classes")
 			break
 		}
 		if class.Comissions == nil {
@@ -352,22 +359,11 @@ func writeClasses(c *chan class, wg *sync.WaitGroup) {
 		if _, err = fo.Write(theBytes); err != nil {
 			panic("error writing to class file")
 		}
-		logScrapef("[out] class %s written to file\n", class.Name)
+		_ = fo.Sync()
+		logScrapef("[out] class %s written to file", class.Name)
 		classCounter++
 	}
-	_, _ = fo.Write([]byte("\n]"))
 }
-
-var htmlCounter = 0
-
-func writeHTMLToFile(e *colly.HTMLElement) {
-	htmlCounter++
-	fo, _ := os.Create(fmt.Sprintf("scraped/out%d.html", htmlCounter))
-	_, _ = fo.Write(e.Response.Body)
-	_ = fo.Close()
-}
-
-//func makeHeader()
 
 func readUserData() (usr, pwd string) {
 	usr, pwd = viper.GetString("login.user"), viper.GetString("login.password")
@@ -400,9 +396,9 @@ func trimDirectories(path string, n int) string {
 	}
 	return path
 }
-func keepCount(response *colly.Response) {
+func keepCount(_ *colly.Response) {
 	scrapedCounter++
-	logScrapef("[scp](%d) Class link scrape...\n", scrapedCounter)
+	logScrapef("[scp](%d) class link scrape...", scrapedCounter)
 }
 
 func logScrapef(format string, args ...interface{}) {
@@ -417,48 +413,28 @@ func logScrapef(format string, args ...interface{}) {
 		fmt.Print(msg)
 	}
 	if viper.GetBool("log.tofile") {
-		logFile.WriteString(msg)
+		_, _ = logFile.WriteString(msg)
 
 	}
 }
 
-//func setFilter(e *colly.HTMLElement) {
-//	//script := e.ChildAttr("table thead tr.filters-tr td:last-of-type a:first-of-type", "onclick") // filter button js
-//	actionURL = e.Attr("action")
-//	//formID := script[strings.Index(script,"ById")+6:strings.Index(script,"')")]
-//	// fill out all required form inputs including hidden inputs and selects
-//	e.ForEach("input,select", func(i int, element *colly.HTMLElement) {
-//		var filterNumber int
-//		key, value := element.Attr("Name"), element.Attr("value")
-//		idx := strings.LastIndex(key,":filter:filter")
-//		if !(idx <1) {
-//			filterNumber, _ = strconv.Atoi(key[idx-1:idx])
-//		}
-//		switch filterNumber {
-//		case filterYear:
-//			filterURI[key] = yearFlag
-//		case filterLevel:
-//			filterURI[key] = levelFlag
-//		case filterPeriod:
-//			filterURI[key] = periodFlag
-//		default:
-//			if key != "" {
-//				filterURI[key] = value
-//			}
-//		}
-//	})
-//}
+var htmlCounter = 0
 
-/* goquery basics
+// for debugging purposes. Pass as argument to as
+// collyCollector.OnHTML('html', writeHTMLToFile)
+// to write whole HTML file to scraped/ directory
+// The scraped/ directory must be created beforehand
+func writeHTMLToFile(e *colly.HTMLElement) {
+	htmlCounter++
+	fo, _ := os.Create(fmt.Sprintf("scraped/out%d.html", htmlCounter))
+	_, _ = fo.Write(e.Response.Body)
+	_ = fo.Close()
+}
+
+/* goQuery basics cheat-sheet
 $( '#header' ); // select the element with an ID of 'header'
 $( 'li' );      // select all list items on the page
 $( 'ul li' );   // select list items that are in unordered lists
 $( '.person' ); // select all elements with a class of 'person'
 $( 'li:nth-of-type(2)') // select second element
 */
-// Extra stuff
-//login["referer"] = loginURL
-//login["origin"] = urlStart
-//cookies := d.Cookies(urlStart)
-//login["cookie"] = fmt.Sprintf("%s;%s;%s",cookies[2],cookies[0],cookies[1])
-//fmt.Printf("%s;",cookies)
