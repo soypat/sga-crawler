@@ -24,3 +24,4 @@
 {"Name":"Auditoría General y de Sistemas","Code":"81.46","Comissions":[{"Label":"B","Schedules":["Miércoles; 18:30; 21:30"],"Teachers":["Cora Bogani, Santiago Manuel","Avendaño Sánchez, Diego","Conesa, Fernando"],"Location":"Aula ITBA: 141 #----\u003e Madero Anexo"}]},
 {"Name":"Autómatas, Teoría de Lenguajes y Compiladores","Code":"72.39","Comissions":[{"Label":"S","Schedules":["Jueves; 15:00; 18:00","Viernes; 15:00; 18:00"],"Teachers":["Santos, Juan Miguel","Arias Roig, Ana Maria","Ramele, Rodrigo Ezequiel"],"Location":"Aula ITBA: 3A #----\u003e SDT"}]},
 {"Name":"Base de Datos I","Code":"72.37","Comissions":[{"Label":"S","Schedules":["Martes; 14:00; 17:00","Jueves; 09:00; 12:00"],"Teachers":["Rodriguez Babino, Cecilia","Gomez, Leticia Irene"],"Location":"Aula ITBA: Lab. C #----\u003e Madero Principal"}]}
+]

@@ -150,6 +150,11 @@ func checkConfig(_ []string) error {
 	if p := viper.GetString("login.password"); p == "" {
 		viper.Set("login.user", "")
 	}
+	if plans := viper.GetStringSlice("plans"); len(plans) == 0 {
+		plans = append(plans,"none")
+		viper.Set("scrape.careerPlans","false")
+	}
+
 	return nil
 }
 func init() {

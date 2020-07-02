@@ -21,3 +21,8 @@
 bin/*
 sgacrawl.zip
 README.txt
+secret.yml
+
+# output of program
+*classes.json
+*classes.txt

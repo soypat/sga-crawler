@@ -2,14 +2,11 @@ package cmd
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"github.com/gocolly/colly/v2"
 	"github.com/spf13/viper"
 	"os"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -36,7 +33,7 @@ const (
 	FilterActive_Unchecked = ""
 )
 
-var scrapedCounter = 0
+
 
 var filterURI = make(map[string]string, 64)
 
@@ -48,13 +45,50 @@ const (
 	htmlLabelElem = "label"
 )
 
+type htmlAction struct {
+	query    string
+	callback func(e *colly.HTMLElement)
+}
+
 func scrape() error {
-	// loginURI info
+	// we define the variables we want to change upon callback
+	var cursosURL, careerURL string
+	loginCallbacks := []htmlAction{
+		{
+			query: "ul.nav",
+			callback: func(e *colly.HTMLElement) {
+				classHref := e.ChildAttr("li:nth-of-type(3) ul.dropdown-menu li:nth-of-type(3) a", "href")
+				if len(classHref) > 100 {
+					cursosURL = trimDirectories(e.Request.URL.String(), 1) + "/" + classHref
+				}
+				careerHref := e.ChildAttr("li:nth-of-type(3) ul.dropdown-menu li:nth-of-type(2) a", "href")
+				if len(careerHref) > 100 {
+					careerURL = trimDirectories(e.Request.URL.String(), 1) + "/" + careerHref
+				}
+			}},
+	}
+	usr, pwd := readUserData()
+	d, err := sgaLogin(usr, pwd, loginCallbacks)
+	// delete user data once finished with login
+	usr, pwd = "", ""
+	if err != nil {
+		return err
+	}
+	if viper.GetBool("scrape.careerPlans") {
+		err = scrapeCareerPlans(d,careerURL)
+	}
+	// We proceed to set filter for courses of a certain year
+	if viper.GetBool("scrape.classes") {
+		err = scrapeClasses(d,cursosURL)
+	}
+
+	return err
+}
+
+
+func sgaLogin(usr, pwd string, actions []htmlAction) (*colly.Collector, error) {
 	loginURI := make(map[string]string, 64)
 	var actionURL, loginURL string
-	var usr, pwd string
-	//var err error
-	usr, pwd = readUserData()
 	c := colly.NewCollector(
 		// Restrict crawling to specific domains
 		colly.AllowedDomains(domain),
@@ -73,7 +107,7 @@ func scrape() error {
 		Parallelism: viper.GetInt("concurrent.threads"),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// fill out loginURI form info for POST method
 	c.OnHTML("input", func(e *colly.HTMLElement) {
@@ -100,269 +134,18 @@ func scrape() error {
 		actionURL = e.Attr("action")
 		loginURL = e.Request.URL.String()
 	})
-	// start visiting
+	// start by visiting SGA
 	err = c.Visit(urlStart)
 	c.Wait()
 	d := c.Clone()
-	var cursosURL string
-	// Obtain course scraping site once we arrive at sga main page
-	d.OnHTML("ul.nav", func(e *colly.HTMLElement) {
-		cursos := e.ChildAttr("li:nth-of-type(3) ul.dropdown-menu li:nth-of-type(3) a", "href")
-		if len(cursos) > 100 {
-			cursosURL = trimDirectories(e.Request.URL.String(), 1) + "/" + cursos
-		}
-	})
+	for _, v := range actions {
+		d.OnHTML(v.query, v.callback)
+	}
 	postURL := trimDirectories(loginURL, 4) + trimDirectories(actionURL, -3) + "/"
-	// trim jsessionid
-	scidx := strings.Index(postURL, ";")
-	// LOGIN TO SGA
-	_ = d.Post(postURL[:scidx], loginURI)
+	// LOGIN TO SGA (and trim jsessionid
+	_ = d.Post(postURL[:strings.Index(postURL, ";")], loginURI)
 	d.Wait()
-	// delete user data once finished with login
-	usr, pwd = "", ""
-	// We proceed to set filter for courses of a certain year
-	filter := d.Clone()
-	filter.OnHTML("form", func(e *colly.HTMLElement) {
-		actionURL = e.Attr("action")
-		// fill out all required form inputs including hidden inputs and selects
-		e.ForEach("input,select", func(i int, element *colly.HTMLElement) {
-			var filterNumber int
-			key, value := element.Attr(htmlNameAttr), element.Attr("value")
-			idx := strings.LastIndex(key, ":filter:filter")
-			if !(idx < 1) {
-				filterNumber, _ = strconv.Atoi(key[idx-1 : idx])
-			}
-			switch filterNumber {
-			case filterYear:
-				filterURI[key] = viper.GetString("filter.year")
-			case filterLevel:
-				filterURI[key] = viper.GetString("filter.level")
-			case filterPeriod:
-				filterURI[key] = viper.GetString("filter.period")
-			case filterActive:
-				filterURI[key] = FilterActive_Unchecked
-				if viper.GetBool("filter.active") {
-					filterURI[key] = FilterActive_Checked
-				}
-			default:
-				if key != "" {
-					filterURI[key] = value
-				}
-			}
-		})
-	})
-	_ = filter.Visit(cursosURL)
-	filter.Wait()
-	scrapeBase := filter.Clone()
-	var scrapeBaseURL string
-	scrapeBase.OnHTML("html", func(e *colly.HTMLElement) {
-		scrapeBaseURL = e.Request.URL.String()
-	})
-	filterPostURL := urlStart + "/app2" + trimDirectories(actionURL, -3) + "/"
-	_ = scrapeBase.Post(filterPostURL, filterURI)
-	scrapeBase.Wait()
-	if scrapeBaseURL == "" {
-		return fmt.Errorf("got no url. check user/password settings")
-	}
-
-	// Initialize scraper queues
-	//addedCourseURLs :=  make(map[string]string,1000)
-	scraper := scrapeBase.Clone()
-	urlClassQueue := make(chan string, viper.GetInt("concurrent.classBufferMax"))
-	var nextURL string
-	var pageNo int
-	// send request to scrape class to channel
-	scraper.OnResponse(keepCount)
-	scraper.OnHTML("form table tbody tr td:last-of-type span span a", func(e *colly.HTMLElement) {
-		href := trimDirectories(e.Attr("href"), -3)
-		for {
-			if len(urlClassQueue) == cap(urlClassQueue) {
-				// url channel full
-				time.Sleep(2000 * time.Millisecond)
-				continue
-			}
-			break
-		}
-		urlClassQueue <- urlStart + "/app2" + href
-	})
-	// obtain next url to find next set of classes
-	scraper.OnHTML("form table thead div.navigator span a.next", func(e *colly.HTMLElement) {
-		nextURL = urlStart + "/app2" + trimDirectories(e.Attr("href"), -3)
-	})
-	scraper.OnHTML("form table thead div.navigator span.next", func(e *colly.HTMLElement) {
-		nextURL = ""
-	})
-	nextURL = scrapeBaseURL
-	EOS := false
-	var wg sync.WaitGroup
-
-	go traverseClasses(scraper, &urlClassQueue, &wg)
-	for !EOS {
-		pageNo++
-		_ = scraper.Visit(nextURL)
-		scraper.Wait()
-		if nextURL == "" {
-			urlClassQueue <- "EOS" // end class traversal
-			EOS = true
-		}
-	}
-	logScrapef("[inf] finished scraping class links")
-	wg.Wait()
-	logScrapef("[inf] program end")
-	if err != nil {
-		return err
-	}
-	return err
-}
-
-func traverseClasses(s *colly.Collector, c *chan string, wg *sync.WaitGroup) {
-	wg.Add(1)
-	defer wg.Done()
-	urlComissionQueue := make(chan string, viper.GetInt("concurrent.classBufferMax")*3)
-	baseClassScraper := s.Clone()
-	go traverseComissions(s, &urlComissionQueue, wg)
-	for {
-		url, ok := <-*c
-		if !ok {
-			time.Sleep(1e7)
-			continue
-		}
-		if url == "EOS" {
-			urlComissionQueue <- "EOS"
-			logScrapef("[inf] finished classes")
-			break
-		}
-		classScraper := baseClassScraper.Clone()
-		//classScraper.OnHTML("html", writeHTMLToFile)
-		classScraper.OnHTML("li.tab1 a", func(e *colly.HTMLElement) {
-			urlComissionQueue <- urlStart + "/app2" + trimDirectories(e.Attr("href"), -2)
-		})
-		logScrapef("[scp] visiting class...")
-		_ = classScraper.Visit(url)
-		classScraper.Wait()
-	}
-}
-
-type class struct {
-	Name       string
-	Code       string
-	Comissions []comission
-}
-type comission struct {
-	Label     string
-	Schedules []string
-	Teachers  []string
-	Location  string
-}
-
-//type weekday int
-
-//const (
-//	dayMon weekday = iota
-//	dayTue
-//	dayWed
-//	dayThu
-//	dayFri
-//	daySat
-//	daySun
-//)
-
-func traverseComissions(s *colly.Collector, c *chan string, wg *sync.WaitGroup) {
-	CLASSES := make(chan class, viper.GetInt("concurrent.classBufferMax"))
-	baseComissionScraper := s.Clone()
-	go writeClasses(&CLASSES, wg)
-	for {
-		url, ok := <-* c
-		if !ok {
-			time.Sleep(1e7)
-			continue
-		}
-		if url == "EOS" {
-			CLASSES <- class{
-				Comissions: nil,
-				Name:       "EOS",
-				Code:       "EOS",
-			}
-			logScrapef("[inf] finished comissions")
-			return
-		}
-		comissionScraper := baseComissionScraper.Clone()
-		comissionScraper.OnHTML("div.tab-panel", func(eclass *colly.HTMLElement) {
-			var newClass class
-			newClass.Code = eclass.ChildText("h4 span:first-of-type")
-			newClass.Name = eclass.ChildText("h4 span:nth-of-type(2)")
-			eclass.ForEach("table tbody tr", func(i int, ecom *colly.HTMLElement) {
-				var newCom comission
-				ecom.ForEach("td", func(i int, comCol *colly.HTMLElement) {
-					switch i {
-					case 0: // schedule Label
-						newCom.Label = comCol.ChildText(htmlLabelElem)
-					case 1: // schedule column
-						comCol.ForEach("div", func(schedRow int, schedItem *colly.HTMLElement) {
-							var spanItems []string
-							schedItem.ForEachWithBreak("span", func(scheduleSpan int, span *colly.HTMLElement) bool {
-								if scheduleSpan == 3 {
-									newCom.Location = strings.TrimSpace(span.Text)
-									return false
-								}
-								spanItems = append(spanItems, strings.TrimSpace(span.Text))
-								return true
-							})
-							newCom.Schedules = append(newCom.Schedules,
-								strings.Join(spanItems, "; "))
-						})
-					case 2: // Teachers
-						newCom.Teachers = comCol.ChildTexts("div " + htmlLabelElem)
-					}
-				})
-				newClass.Comissions = append(newClass.Comissions, newCom)
-			})
-			CLASSES <- newClass
-		})
-		logScrapef("[scp] visiting comission...")
-		_ = comissionScraper.Visit(url)
-		comissionScraper.Wait()
-	}
-}
-
-func writeClasses(c *chan class, wg *sync.WaitGroup) {
-	wg.Add(1)
-	defer wg.Done()
-	fo, err := os.Create("classes.json")
-	if err != nil {
-		panic("Could not create class file. Permissions ok?")
-	}
-	defer fo.Close()
-	defer fo.Sync()
-	_, _ = fo.WriteString("[\n")
-	defer time.Sleep(time.Nanosecond)
-	defer fo.WriteString("\n]")
-	classCounter := 0
-	for {
-		class, ok := <-*c
-		if !ok {
-			time.Sleep(1e7)
-			_ = fo.Sync()
-			continue
-		}
-		if class.Name == "EOS" {
-			logScrapef("[out] finished writing classes")
-			break
-		}
-		if class.Comissions == nil {
-			continue
-		}
-		if classCounter != 0 {
-			_, _ = fo.Write([]byte(",\n"))
-		}
-		theBytes, _ := json.Marshal(class)
-		if _, err = fo.Write(theBytes); err != nil {
-			panic("error writing to class file")
-		}
-		_ = fo.Sync()
-		logScrapef("[out] class %s written to file", class.Name)
-		classCounter++
-	}
+	return d, nil
 }
 
 func readUserData() (usr, pwd string) {
@@ -396,10 +179,6 @@ func trimDirectories(path string, n int) string {
 	}
 	return path
 }
-func keepCount(_ *colly.Response) {
-	scrapedCounter++
-	logScrapef("[scp](%d) class link scrape...", scrapedCounter)
-}
 
 func logScrapef(format string, args ...interface{}) {
 	var msg string
@@ -418,8 +197,8 @@ func logScrapef(format string, args ...interface{}) {
 	}
 }
 
-var htmlCounter = 0
 
+var htmlCounter = 0
 // for debugging purposes. Pass as argument to as
 // collyCollector.OnHTML('html', writeHTMLToFile)
 // to write whole HTML file to scraped/ directory
