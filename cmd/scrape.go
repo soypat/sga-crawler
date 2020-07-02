@@ -33,8 +33,6 @@ const (
 	FilterActive_Unchecked = ""
 )
 
-
-
 var filterURI = make(map[string]string, 64)
 
 const (
@@ -75,16 +73,15 @@ func scrape() error {
 		return err
 	}
 	if viper.GetBool("scrape.careerPlans") {
-		err = scrapeCareerPlans(d,careerURL)
+		err = scrapeCareerPlans(d, careerURL)
 	}
 	// We proceed to set filter for courses of a certain year
 	if viper.GetBool("scrape.classes") {
-		err = scrapeClasses(d,cursosURL)
+		err = scrapeClasses(d, cursosURL)
 	}
 
 	return err
 }
-
 
 func sgaLogin(usr, pwd string, actions []htmlAction) (*colly.Collector, error) {
 	loginURI := make(map[string]string, 64)
@@ -191,14 +188,14 @@ func logScrapef(format string, args ...interface{}) {
 	if !viper.GetBool("log.silent") {
 		fmt.Print(msg)
 	}
-	if viper.GetBool("log.tofile") {
+	if viper.GetBool("log.toFile") {
 		_, _ = logFile.WriteString(msg)
-
+		_ = logFile.Sync()
 	}
 }
 
-
 var htmlCounter = 0
+
 // for debugging purposes. Pass as argument to as
 // collyCollector.OnHTML('html', writeHTMLToFile)
 // to write whole HTML file to scraped/ directory

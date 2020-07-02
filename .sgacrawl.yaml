@@ -1,5 +1,5 @@
 scrape:
-  classes: true      # scrape classes
+  classes: true       # scrape classes
   careerPlans: false  # scrape current career plans
 
 filter:         # what classes to filter by (required)
@@ -9,7 +9,8 @@ filter:         # what classes to filter by (required)
   period: 1     # 1: primer cuatri, 2:segundo cuatri, all: all cuatris. Also available: special, summer
 
 # Career plans to scrape. If plans is set to 'all' then all plans are scraped
-plans: [M09 - Rev18 (Agosto), M09 - Rev18 (Marzo), K07-Rev.18]
+# example array of plans: [M09 - Rev18 (Agosto), M09 - Rev18 (Marzo), K07-Rev.18]
+plans: all
 
 request-delay:     # information pertaining to scraper configuration
   minimum_ms: 2000 # delay between non-concurrent scraper requests [miliseconds]

@@ -26,7 +26,7 @@ import (
 
 var cfgFile string
 
-var logFile os.File
+var logFile *os.File
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -36,11 +36,19 @@ var rootCmd = &cobra.Command{
 
 	Example of file:
 
+scrape:
+  classes: true       # scrape classes
+  careerPlans: false  # scrape current career plans
+
 filter:         # what classes to filter by (required)
   year: 2020
   level: grado  # grado, ingreso, posgrado.  Also works with shorthands grad, ing, pos, ee
   active: on    # bool on/off active/inactive classes. Always use on/true unless you know what you are doing
   period: 1     # 1: primer cuatri, 2:segundo cuatri, all: all cuatris. Also available: special, summer
+
+# Career plans to scrape. If plans is set to 'all' then all plans are scraped
+# example array of plans: [M09 - Rev18 (Agosto), M09 - Rev18 (Marzo), K07-Rev.18]
+plans: all
 
 request-delay:     # information pertaining to scraper configuration
   minimum_ms: 2000 # delay between non-concurrent scraper requests [miliseconds]
@@ -48,11 +56,12 @@ request-delay:     # information pertaining to scraper configuration
 
 concurrent:
   classBufferMax: 10 # recommended 10 or lower if sgacrawl stops writing classes (required)
-  threads: 3  # Amount of concurrent requests at a time. recommended 1-3 threads
+  threads: 3         # amount of concurrent requests at a time. recommended 1-3 threads
+
 
 log:
   silent: false # outputs log if false
-  tofile: false # writes log to file if true
+  toFile: false # writes log to file if true
 
 You can copy the text above to a text-editor and save to have a config file up and running.
 `,
@@ -75,12 +84,12 @@ You can copy the text above to a text-editor and save to have a config file up a
 }
 
 func runner(_ []string) error {
-	if viper.GetBool("log.tofile") {
+	if viper.GetBool("log.toFile") {
 		fo, err := os.Create("sgacrawl.log")
 		if err != nil {
 			return err
 		}
-		logFile = *fo
+		logFile = fo
 		defer logFile.Close()
 		defer logFile.Sync()
 	}
@@ -96,6 +105,9 @@ func Execute() {
 	}
 }
 func checkConfig(_ []string) error {
+	if len(viper.AllKeys()) == 0 {
+		return fmt.Errorf("no keys found in file")
+	}
 	if year := viper.GetInt("filter.year"); year > 2050 || year < 2000 {
 		return fmt.Errorf("bad year! should be integer, managed to read: %d", year)
 	}
@@ -117,7 +129,6 @@ func checkConfig(_ []string) error {
 		return fmt.Errorf("bad filter.level in config. got %s", level)
 	}
 	viper.Set("filter.level", level)
-
 	period := viper.GetString("filter.period")
 	switch strings.ToLower(period) {
 	case "sem2", "cuat2", "segundo cuat.", "2":
@@ -151,10 +162,13 @@ func checkConfig(_ []string) error {
 		viper.Set("login.user", "")
 	}
 	if plans := viper.GetStringSlice("plans"); len(plans) == 0 {
-		plans = append(plans,"none")
-		viper.Set("scrape.careerPlans","false")
+		plans = append(plans, "none")
+		viper.Set("scrape.careerPlans", "false")
 	}
-
+	scrapeClasses, scrapePlans := viper.GetBool("scrape.classes"), viper.GetBool("scrape.careerPlans")
+	if !scrapeClasses && !scrapePlans {
+		return fmt.Errorf("both scrape.classes and scrape.careerPlans can't be false. no work to do")
+	}
 	return nil
 }
 func init() {
