@@ -73,7 +73,10 @@ func scrapeCareerPlans(c *colly.Collector, careerURL string) error {
 		go traverseCareer(scrapeBase.Clone(), l, &wg, &Careers)
 	}
 	wg.Wait()
-	b, err := json.MarshalIndent(Careers, viper.GetString("beautify.prefix") , viper.GetString("beautify.indent"))
+	b,err := json.MarshalIndent(Careers, viper.GetString("beautify.prefix") , viper.GetString("beautify.indent"))
+	if viper.GetBool("minify") {
+		b, err = json.Marshal(Careers)
+	}
 	if err != nil {
 		panic(err)
 	}

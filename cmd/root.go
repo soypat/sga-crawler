@@ -172,6 +172,8 @@ func checkConfig(_ []string) error {
 	pfx, indt := UnescapeWhitespace(viper.GetString("beautify.prefix")), UnescapeWhitespace(viper.GetString("beautify.indent"))
 	if strings.TrimSpace(pfx) != "" || strings.TrimSpace(indt) != "" {
 		fmt.Printf("[warn] beautify.prefix/indent seem to have non whitespace characters. this may invalidate json. got:%s,%s",pfx,indt)
+	} else if indt == "" && pfx == "" {
+		viper.Set("minify", "true")
 	}
 	viper.Set("beautify.prefix",pfx)
 	viper.Set("beautify.indent",indt)
