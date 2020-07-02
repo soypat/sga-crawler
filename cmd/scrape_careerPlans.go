@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gocolly/colly/v2"
 	"github.com/spf13/viper"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,16 +68,30 @@ func scrapeCareerPlans(c *colly.Collector, careerURL string) error {
 	// create the scraper to scrape all classes
 	var wg sync.WaitGroup
 	wg.Add(len(careerLinks))
+	var Careers []career
 	for _, l := range careerLinks {
-		go traverseCareer(scrapeBase.Clone(), l, &wg)
+		go traverseCareer(scrapeBase.Clone(), l, &wg, &Careers)
 	}
 	wg.Wait()
+	b, err := json.Marshal(Careers)
+	if err != nil {
+		panic(err)
+	}
+	fo, err := os.Create("plans.json")
+	if err != nil {
+		panic(err)
+	}
+	defer fo.Close()
+	fo.Write(b)
+	fo.Sync()
+	logScrapef("[out] finished writing career plans to file")
 	// TODO write plans to file
 	return nil
 }
 
-func traverseCareer(c *colly.Collector, careerURL string, group *sync.WaitGroup) {
+func traverseCareer(c *colly.Collector, careerURL string, group *sync.WaitGroup, Careers *[]career) {
 	defer group.Done()
+
 	plans := viper.GetStringSlice("plans") // these are already trimmed
 	planMap := make(map[string]string, 100)
 	var careerName string
@@ -88,7 +104,6 @@ func traverseCareer(c *colly.Collector, careerURL string, group *sync.WaitGroup)
 			planMap[plan] = urlStart + "/app2" + trimDirectories(href, -2)
 		}
 	})
-
 	_ = c.Visit(careerURL)
 	c.Wait()
 	var Plans []*plan
@@ -100,35 +115,47 @@ func traverseCareer(c *colly.Collector, careerURL string, group *sync.WaitGroup)
 			Plans = append(Plans, Plan)
 		}
 	}
+	if len(Plans) == 0 {
+		return
+	}
+	Career := career{
+		Name:  careerName,
+		Plans: Plans,
+	}
+	*Careers = append(*Careers, Career)
 }
 
 func traversePlan(c *colly.Collector, careerURL string) (*plan, error) {
 	var Plan plan
-	//c.OnHTML("html", writeHTMLToFile) //"#content div h4: span"
-	// TODO wait for colly to fix this bug
-	c.OnHTML(`html body div.container div.row div.backgroundBordered h4:first-of-type span`, func(ele *colly.HTMLElement) {
+	c.OnHTML(`#content > div.backgroundBordered > h4 > span`, func(ele *colly.HTMLElement) {
 		Plan.Name = ele.Text
 	})
-	c.OnHTML("table:first-of-type tbody tr", func(e *colly.HTMLElement) {
+	c.OnHTML("table:first-of-type", func(e *colly.HTMLElement) {
 		var Semester semester = make(map[string][]course, 20)
-		semesterName := e.ChildText("td div div.row h4 span")
-		e.ForEach("td div div table tbody tr", func(_ int, element *colly.HTMLElement) {
-			var Course course
-			codeAndName := strings.Split(element.ChildText("td:first-of-type a span"), "-")
-			if len(codeAndName) != 2 {
-				return
+		e.ForEach(`tbody tr`, func(i int, esem *colly.HTMLElement) {
+			semesterName := esem.ChildText("tbody > tr > td div div.row h4 span")
+			if semesterName == "Contenido:" {
+				semesterName = e.ChildText(`thead > tr > th > div > div:nth-of-type(2) > span:first-of-type`)
 			}
-			Course.Code = strings.TrimSpace(codeAndName[0])
-			Course.Name = strings.TrimSpace(codeAndName[1])
-			fmt.Print(Plan.Name,semesterName,Course.Name,"\n")
-			Course.Credits = element.ChildText("td:nth-of-type(2)")
-			Course.ReqCredits = element.ChildText("td:nth-of-type(3)")
-			element.ForEach("td:last-of-type span", func(_ int, element2 *colly.HTMLElement) {
-				Course.Correlatives = append(Course.Correlatives, element2.Text)
+			esem.ForEach("td div div table tbody tr", func(_ int, ecourse *colly.HTMLElement) {
+				var Course course
+				codeAndName := strings.Split(ecourse.ChildText("td:first-of-type a span"), "-")
+				if len(codeAndName) != 2 {
+					return
+				}
+				Course.Code = strings.TrimSpace(codeAndName[0])
+				Course.Name = strings.TrimSpace(codeAndName[1])
+				Course.Credits = ecourse.ChildText("td:nth-of-type(2)")
+				Course.ReqCredits = ecourse.ChildText("td:nth-of-type(3)")
+				ecourse.ForEach("td:last-of-type > span", func(_ int, element2 *colly.HTMLElement) {
+					Course.Correlatives = append(Course.Correlatives, strings.TrimSpace(element2.Text))
+				})
+				Semester[semesterName] = append(Semester[semesterName], Course)
 			})
-			Semester[semesterName] = append(Semester[semesterName], Course)
 		})
-		Plan.semesters = append(Plan.semesters, Semester)
+		if len(Semester) != 0 {
+			Plan.Semesters = append(Plan.Semesters, Semester)
+		}
 	})
 	_ = c.Visit(careerURL)
 	c.Wait()
@@ -139,9 +166,13 @@ func traversePlan(c *colly.Collector, careerURL string) (*plan, error) {
 	return &Plan, nil
 }
 
+type career struct {
+	Name  string
+	Plans []*plan
+}
 type plan struct {
 	Name      string
-	semesters []semester `json:"-"`
+	Semesters []semester
 }
 
 type semester map[string][]course

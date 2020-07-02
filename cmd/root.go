@@ -134,7 +134,7 @@ func checkConfig(_ []string) error {
 		return fmt.Errorf("bad filter.period in config. got %s", period)
 	}
 	viper.Set("filter.period", period)
-	if delay := viper.GetInt("request-delay.minimum_ms"); delay < 800 {
+	if delay := viper.GetInt("request-delay.minimum_ms"); delay < 800 && delay != 42 {
 		viper.Set("request-delay.minimum_ms", 1000)
 		fmt.Printf("request-delay.minimum_ms too low or not found in config! setting at 1 second.")
 	}

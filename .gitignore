@@ -26,3 +26,4 @@ secret.yml
 # output of program
 *classes.json
 *classes.txt
+*plans.json
