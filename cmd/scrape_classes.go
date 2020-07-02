@@ -250,7 +250,7 @@ func writeClasses(c *chan class, wg *sync.WaitGroup) {
 		if classCounter != 0 {
 			_, _ = fo.Write([]byte(",\n"))
 		}
-		theBytes, _ := json.Marshal(class)
+		theBytes, _ := json.MarshalIndent(class, viper.GetString("beautify.prefix") , viper.GetString("beautify.indent"))
 		if _, err = fo.Write(theBytes); err != nil {
 			panic("error writing to class file")
 		}

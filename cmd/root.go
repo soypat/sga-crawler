@@ -17,11 +17,11 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"os"
 	"strings"
-	"github.com/mitchellh/go-homedir"
-	"github.com/spf13/viper"
 )
 
 var cfgFile string
@@ -169,6 +169,12 @@ func checkConfig(_ []string) error {
 	if !scrapeClasses && !scrapePlans {
 		return fmt.Errorf("both scrape.classes and scrape.careerPlans can't be false. no work to do")
 	}
+	pfx, indt := UnescapeWhitespace(viper.GetString("beautify.prefix")), UnescapeWhitespace(viper.GetString("beautify.indent"))
+	if strings.TrimSpace(pfx) != "" || strings.TrimSpace(indt) != "" {
+		fmt.Printf("[warn] beautify.prefix/indent seem to have non whitespace characters. this may invalidate json. got:%s,%s",pfx,indt)
+	}
+	viper.Set("beautify.prefix",pfx)
+	viper.Set("beautify.indent",indt)
 	return nil
 }
 func init() {
@@ -200,4 +206,10 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
+}
+func UnescapeWhitespace(s string) string {
+	s = strings.ReplaceAll(s, "\\n","\n")
+	s = strings.ReplaceAll(s, "\\t","\t")
+	s = strings.ReplaceAll(s, "\\r","\r")
+	return s
 }

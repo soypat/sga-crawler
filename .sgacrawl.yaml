@@ -6,7 +6,7 @@ filter:         # what classes to filter by (required)
   year: 2020
   level: grado  # grado, ingreso, posgrado.  Also works with shorthands grad, ing, pos, ee
   active: on    # bool on/off active/inactive classes. Always use on/true unless you know what you are doing
-  period: 1     # 1: primer cuatri, 2:segundo cuatri, all: all cuatris. Also available: special, summer
+  period: 2     # 1: primer cuatri, 2:segundo cuatri, all: all cuatris. Also available: special, summer
 
 # Career plans to scrape. If plans is set to 'all' then all plans are scraped
 # example array of plans: [M09 - Rev18 (Agosto), M09 - Rev18 (Marzo), K07-Rev.18]
@@ -20,6 +20,11 @@ concurrent:
   classBufferMax: 10 # recommended 10 or lower if sgacrawl stops writing classes (required)
   threads: 3         # amount of concurrent requests at a time. recommended 1-3 threads
 
+# json indentation for better reading by humans. Leave null to minify output.
+# you might want to set prefix: " " for spaces and indent: "\t"
+beautify:
+  prefix: " "
+  indent: "\t"
 
 log:
   silent: false # outputs log if false

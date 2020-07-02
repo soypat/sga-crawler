@@ -73,7 +73,7 @@ func scrapeCareerPlans(c *colly.Collector, careerURL string) error {
 		go traverseCareer(scrapeBase.Clone(), l, &wg, &Careers)
 	}
 	wg.Wait()
-	b, err := json.Marshal(Careers)
+	b, err := json.MarshalIndent(Careers, viper.GetString("beautify.prefix") , viper.GetString("beautify.indent"))
 	if err != nil {
 		panic(err)
 	}
@@ -85,7 +85,6 @@ func scrapeCareerPlans(c *colly.Collector, careerURL string) error {
 	fo.Write(b)
 	fo.Sync()
 	logScrapef("[out] finished writing career plans to file")
-	// TODO write plans to file
 	return nil
 }
 
@@ -127,11 +126,11 @@ func traverseCareer(c *colly.Collector, careerURL string, group *sync.WaitGroup,
 
 func traversePlan(c *colly.Collector, careerURL string) (*plan, error) {
 	var Plan plan
+	var Sems Semesters = make(map[string][]course, 64)
 	c.OnHTML(`#content > div.backgroundBordered > h4 > span`, func(ele *colly.HTMLElement) {
 		Plan.Name = ele.Text
 	})
 	c.OnHTML("table:first-of-type", func(e *colly.HTMLElement) {
-		var Semester semester = make(map[string][]course, 20)
 		e.ForEach(`tbody tr`, func(i int, esem *colly.HTMLElement) {
 			semesterName := esem.ChildText("tbody > tr > td div div.row h4 span")
 			if semesterName == "Contenido:" {
@@ -150,15 +149,15 @@ func traversePlan(c *colly.Collector, careerURL string) (*plan, error) {
 				ecourse.ForEach("td:last-of-type > span", func(_ int, element2 *colly.HTMLElement) {
 					Course.Correlatives = append(Course.Correlatives, strings.TrimSpace(element2.Text))
 				})
-				Semester[semesterName] = append(Semester[semesterName], Course)
+				Sems[semesterName] = append(Sems[semesterName], Course)
 			})
 		})
-		if len(Semester) != 0 {
-			Plan.Semesters = append(Plan.Semesters, Semester)
-		}
 	})
 	_ = c.Visit(careerURL)
 	c.Wait()
+	if len(Sems) != 0 {
+		Plan.Semesters = Sems
+	}
 	if Plan.Name == "" {
 		return nil, fmt.Errorf("could not read career plan")
 	}
@@ -172,10 +171,10 @@ type career struct {
 }
 type plan struct {
 	Name      string
-	Semesters []semester
+	Semesters
 }
 
-type semester map[string][]course
+type Semesters map[string][]course
 
 type course struct {
 	Name         string
