@@ -2,6 +2,8 @@ scrape:
   classes: true       # scrape classes
   careerPlans: false  # scrape current career plans
 
+# class scraper is affected by year, level, active, period fields
+# careerPlan scraper is affected by active, level fields
 filter:         # what classes to filter by (required)
   year: 2020
   level: grado  # grado, ingreso, posgrado.  Also works with shorthands grad, ing, pos, ee
