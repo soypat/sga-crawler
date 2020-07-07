@@ -15,6 +15,7 @@ import (
 func scrapeClasses(c *colly.Collector, classesURL string) error {
 	var actionURL string
 	col := c.Clone()
+	var filterURI = make(map[string]string, 64)
 	col.OnHTML("form", func(e *colly.HTMLElement) {
 		actionURL = e.Attr("action")
 		// fill out all required form inputs including hidden inputs and selects
@@ -66,7 +67,7 @@ func scrapeClasses(c *colly.Collector, classesURL string) error {
 	// send request to scrape class to channel
 	// count class link sites
 	var scrapedCounter = 0
-	keepClassCount := func (_ *colly.Response) {
+	keepClassCount := func(_ *colly.Response) {
 		scrapedCounter++
 		logScrapef("[scp](%d) class link scrape...", scrapedCounter)
 	}
@@ -141,7 +142,9 @@ func traverseClasses(s *colly.Collector, c *chan string, wg *sync.WaitGroup) {
 type class struct {
 	Name       string
 	Code       string
-	Comissions []comission
+	Comissions []comission `json:",omitempty"`
+	Credits    int         `json:",omitempty"`
+	Grades     []grade     `json:",omitempty"`
 }
 type comission struct {
 	Label     string
@@ -254,7 +257,7 @@ func writeClasses(c *chan class, wg *sync.WaitGroup) {
 		if viper.GetBool("minify") {
 			theBytes, _ = json.Marshal(class)
 		} else {
-			theBytes, _ = json.MarshalIndent(class, viper.GetString("beautify.prefix") , viper.GetString("beautify.indent"))
+			theBytes, _ = json.MarshalIndent(class, viper.GetString("beautify.prefix"), viper.GetString("beautify.indent"))
 		}
 		if _, err = fo.Write(theBytes); err != nil {
 			panic("error writing to class file")

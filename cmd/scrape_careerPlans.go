@@ -18,6 +18,7 @@ const (
 
 func scrapeCareerPlans(c *colly.Collector, careerURL string) error {
 	var actionURL string
+	var filterURI = make(map[string]string, 64)
 	col := c.Clone()
 	col.OnHTML("form", func(e *colly.HTMLElement) {
 		actionURL = e.Attr("action")

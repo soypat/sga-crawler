@@ -31,7 +31,7 @@ var logFile *os.File
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "sgacrawl",
-	Short: "Saves all classes in structures JSON file",
+	Short: "Saves all classes and career plans in a structured JSON file",
 	Long: `Crawls SGA! Configure with a .sgacrawl.yaml file!
 
 	Example of file:
@@ -40,11 +40,13 @@ scrape:
   classes: true       # scrape classes
   careerPlans: false  # scrape current career plans
 
+# class scraper is affected by year, level, active, period fields
+# careerPlan scraper is affected by active, level fields
 filter:         # what classes to filter by (required)
   year: 2020
   level: grado  # grado, ingreso, posgrado.  Also works with shorthands grad, ing, pos, ee
   active: on    # bool on/off active/inactive classes. Always use on/true unless you know what you are doing
-  period: 1     # 1: primer cuatri, 2:segundo cuatri, all: all cuatris. Also available: special, summer
+  period: 2     # 1: primer cuatri, 2:segundo cuatri, all: all cuatris. Also available: special, summer
 
 # Career plans to scrape. If plans is set to 'all' then all plans are scraped
 # example array of plans: [M09 - Rev18 (Agosto), M09 - Rev18 (Marzo), K07-Rev.18]
@@ -56,8 +58,13 @@ request-delay:     # information pertaining to scraper configuration
 
 concurrent:
   classBufferMax: 10 # recommended 10 or lower if sgacrawl stops writing classes (required)
-  threads: 3         # amount of concurrent requests at a time. recommended 1-3 threads
+  threads: 3         # amount of concurrent requests at a time. recommended 1-4 threads
 
+# json indentation for better reading by humans. Leave null to minify output.
+# you might want to set prefix: " " and indent: "\t"
+beautify:
+  prefix: " "
+  indent: "\t"
 
 log:
   silent: false # outputs log if false
@@ -152,7 +159,8 @@ func checkConfig(_ []string) error {
 	if rndDelay := viper.GetInt("request-delay.rand_ms"); rndDelay < 0 {
 		viper.Set("request-delay.rand_ms", 0)
 	}
-	if parallel := viper.GetInt("concurrent.threads"); parallel < 0 {
+	if parallel := viper.GetInt("concurrent.threads"); parallel < 2  && parallel != 0{
+		fmt.Printf("[warn] number of threads is one or negative, setting to zero for expected behaviour.\n")
 		viper.Set("concurrent.threads", 0)
 	}
 	if bufferMax := viper.GetInt("concurrent.classBufferMax"); bufferMax < 1 {
@@ -171,7 +179,7 @@ func checkConfig(_ []string) error {
 	}
 	pfx, indt := UnescapeWhitespace(viper.GetString("beautify.prefix")), UnescapeWhitespace(viper.GetString("beautify.indent"))
 	if strings.TrimSpace(pfx) != "" || strings.TrimSpace(indt) != "" {
-		fmt.Printf("[warn] beautify.prefix/indent seem to have non whitespace characters. this may invalidate json. got:%s,%s",pfx,indt)
+		fmt.Printf("[warn] beautify.prefix/indent seem to have non whitespace characters. this may invalidate json. got:%s,%s\n",pfx,indt)
 	} else if indt == "" && pfx == "" {
 		viper.Set("minify", "true")
 	}

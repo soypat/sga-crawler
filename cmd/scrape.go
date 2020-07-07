@@ -11,6 +11,14 @@ import (
 )
 
 const (
+	domain        = "sga.itba.edu.ar"
+	urlStart      = "https://" + domain
+	htmlNameAttr  = "name"
+	htmlValueAttr = "value"
+	htmlLabelElem = "label"
+)
+
+const (
 	// filter option identificator
 	filterLevel  = 3 // dropdown or 'select' element
 	filterPeriod = 5 // dropdown or 'select' element
@@ -21,7 +29,7 @@ const (
 	FilterLevel_Ingreso            = "0"
 	FilterLevel_Grado              = "1"
 	FilterLevel_Posgrado           = "2"
-	FilterLevel_EducacionEjecutiva = "2"
+	FilterLevel_EducacionEjecutiva = "3"
 	// Period
 	FilterPeriod_All       = ""
 	FilterPeriod_Semester1 = "0"
@@ -31,16 +39,6 @@ const (
 	// Active/Inactive
 	FilterActive_Checked   = "on"
 	FilterActive_Unchecked = ""
-)
-
-var filterURI = make(map[string]string, 64)
-
-const (
-	domain        = "sga.itba.edu.ar"
-	urlStart      = "https://" + domain
-	htmlNameAttr  = "name"
-	htmlValueAttr = "value"
-	htmlLabelElem = "label"
 )
 
 type htmlAction struct {
@@ -79,7 +77,6 @@ func scrape() error {
 	if viper.GetBool("scrape.classes") {
 		err = scrapeClasses(d, cursosURL)
 	}
-
 	return err
 }
 
@@ -135,6 +132,10 @@ func sgaLogin(usr, pwd string, actions []htmlAction) (*colly.Collector, error) {
 	err = c.Visit(urlStart)
 	c.Wait()
 	d := c.Clone()
+	var userName string
+	d.OnHTML("div.span6:nth-child(1) > span:nth-child(1)", func(e *colly.HTMLElement) {
+		userName = e.Text
+	})
 	for _, v := range actions {
 		d.OnHTML(v.query, v.callback)
 	}
@@ -142,6 +143,10 @@ func sgaLogin(usr, pwd string, actions []htmlAction) (*colly.Collector, error) {
 	// LOGIN TO SGA (and trim jsessionid
 	_ = d.Post(postURL[:strings.Index(postURL, ";")], loginURI)
 	d.Wait()
+	if userName == "" {
+		return nil, fmt.Errorf("login unsuccesful. check login details")
+	}
+	logScrapef("[inf] logged in as %s", userName)
 	return d, nil
 }
 
@@ -175,6 +180,10 @@ func trimDirectories(path string, n int) string {
 		path = path[:idx]
 	}
 	return path
+}
+
+func logScrape(args ...interface{}) {
+	logScrapef("%s", args...)
 }
 
 func logScrapef(format string, args ...interface{}) {

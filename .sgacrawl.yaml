@@ -20,10 +20,10 @@ request-delay:     # information pertaining to scraper configuration
 
 concurrent:
   classBufferMax: 10 # recommended 10 or lower if sgacrawl stops writing classes (required)
-  threads: 3         # amount of concurrent requests at a time. recommended 1-3 threads
+  threads: 3         # amount of concurrent requests at a time. recommended 2-4 threads or 0 for non-concurrent use
 
 # json indentation for better reading by humans. Leave null to minify output.
-# you might want to set prefix: " " for spaces and indent: "\t"
+# you might want to set prefix: " " and indent: "\t"
 beautify:
   prefix: " "
   indent: "\t"
