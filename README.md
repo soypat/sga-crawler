@@ -9,6 +9,7 @@ sgacrawl can create three files:
 
 * `classes.json`  Will have class crawling results
 * `plans.json`  Will have career plan crawling results
+* `student.json` Using the `student` command one can obtain grades, passed classes and such
 * `sgacrawl.log`  if log.tofile  is set to true this file shall contain log information
 
 each execution will overwrite previous file.
