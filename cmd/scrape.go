@@ -3,11 +3,14 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"github.com/gocolly/colly/v2"
-	"github.com/spf13/viper"
 	"os"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/gocolly/colly/v2"
+	"github.com/spf13/viper"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
@@ -160,8 +163,13 @@ func readUserData() (usr, pwd string) {
 	scanner.Scan()
 	usr = scanner.Text()
 	fmt.Print("password:")
-	scanner.Scan()
-	pwd = scanner.Text()
+	bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return "", ""
+	}
+	pwd = string(bytePassword)
+	// scanner.Scan()
+	// pwd = scanner.Text()
 	return usr, pwd
 }
 

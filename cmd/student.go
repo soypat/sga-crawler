@@ -1,5 +1,5 @@
 /*
-Copyright © 2020 NAME HERE <EMAIL ADDRESS>
+Copyright © 2020 PATRICIO WHITTINGSLOW <pwhittingslow@itba.edu.ar>
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,19 +18,20 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	wd "github.com/fedesog/webdriver"
-	"github.com/spf13/cobra"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	wd "github.com/fedesog/webdriver"
+	"github.com/spf13/cobra"
 )
 
 // studentCmd represents the student command
 var studentCmd = &cobra.Command{
 	Use:   "student",
 	Short: "Obtain student information. Requires chromedriver.exe",
-	Long:  `Obtain student grades and credits.
+	Long: `Obtain student grades and credits.
 Chrome driver can be obtained from https://chromedriver.chromium.org/
 
 `,
@@ -42,11 +43,12 @@ Chrome driver can be obtained from https://chromedriver.chromium.org/
 	},
 }
 var driverPath string
+
 func init() {
 	rootCmd.AddCommand(studentCmd)
 
 	// Here you will define your flags and configuration settings.
-	studentCmd.Flags().StringVar(&driverPath,"driver","chromedriver.exe","Indicate chrome driver executable location. By default in working directory.")
+	studentCmd.Flags().StringVar(&driverPath, "driver", "chromedriver.exe", "Indicate chrome driver executable location. By default in working directory.")
 	//studentCmd.PersistentFlags().String("driver", "chromedriver.exe", "Indicate chrome driver executable location. By default in working directory.")
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
@@ -141,11 +143,11 @@ func scrapeStudent(_ []string) error {
 				Stu.Classes = append(Stu.Classes, Class)
 				classCount++
 			}
-			if grade1String != ""  {
-				if strings.Index(strings.ToLower(grade1String),"aprobada")>=0 {
+			if grade1String != "" {
+				if strings.Index(strings.ToLower(grade1String), "aprobada") >= 0 {
 					Stu.Classes[classCount-1].Grades = append(Stu.Classes[classCount-1].Grades, grade{
-						Pass: true,
-						Record:grade1String,
+						Pass:   true,
+						Record: grade1String,
 						Number: -1,
 					})
 					continue
@@ -164,7 +166,7 @@ func scrapeStudent(_ []string) error {
 					Stu.Classes[classCount-1].Grades = append(Stu.Classes[classCount-1].Grades, grade{
 						Number: thegrade,
 						Date:   strings.Join(splitString[1:], " "),
-						Pass:   !strings.Contains(style,"red"),
+						Pass:   !strings.Contains(style, "red"),
 						Record: "",
 					})
 				}
@@ -179,14 +181,14 @@ func scrapeStudent(_ []string) error {
 					if err != nil {
 						return err
 					}
-					colorDiv, err := div.FindElement("xpath",`div`)
+					colorDiv, err := div.FindElement("xpath", `div`)
 					if err != nil {
 						return err
 					}
 					style, err := colorDiv.GetAttribute("style")
 					splitString := strings.Split(grade2Text, " ")
-					dateRecordString := strings.Join(splitString[1:],"")
-					recordIndex := strings.Index(strings.ToLower(dateRecordString),"acta")
+					dateRecordString := strings.Join(splitString[1:], "")
+					recordIndex := strings.Index(strings.ToLower(dateRecordString), "acta")
 					if recordIndex < 1 {
 						continue // Nota no consolidada
 					}
@@ -194,8 +196,8 @@ func scrapeStudent(_ []string) error {
 					if err == nil {
 						Stu.Classes[classCount-1].Grades = append(Stu.Classes[classCount-1].Grades, grade{
 							Number: thegrade,
-							Date:   strings.TrimLeft(strings.TrimRight(dateRecordString[:recordIndex],") \t"),"( \t"),
-							Pass:   !strings.Contains(style,"red"),
+							Date:   strings.TrimLeft(strings.TrimRight(dateRecordString[:recordIndex], ") \t"), "( \t"),
+							Pass:   !strings.Contains(style, "red"),
 							Record: strings.TrimSpace(dateRecordString[recordIndex+len("acta:"):]),
 						})
 					}
@@ -211,7 +213,6 @@ func scrapeStudent(_ []string) error {
 	logScrape("[scp] finished scraping student data")
 	return nil
 }
-
 
 func querys(s *wd.Session, querySelector string) ([]wd.WebElement, error) {
 	return s.FindElements(wd.FindElementStrategy("css selector"), querySelector)
@@ -278,8 +279,6 @@ func mouseClickSelector(s *wd.Session, querySelector string) (*wd.Session, error
 	}
 	return s, s.Click(m)
 }
-
-
 
 // this is old colly code. New code shall use github.com/fedesog/webdriver
 /*
